@@ -196,6 +196,63 @@ def detect_particles(
     return np.array(particles, dtype=np.float32)
 
 
+def detect_particles_binarized(
+    img: np.ndarray,
+    threshold: float = 0.4,
+    min_area: float = 20.0,
+    max_area: float = 5000.0,
+    invert: bool = False,
+) -> np.ndarray:
+    """Detect large particle centroids and orientation angles via binarization and central moments.
+
+    Parameters
+    ----------
+    img : (H, W) float32 in [0, 1]
+    threshold : binarization threshold in [0, 1]
+    min_area : minimum contour area in pixels to keep
+    max_area : maximum contour area in pixels to keep
+    invert : if True, invert the thresholding (objects are darker than background)
+
+    Returns
+    -------
+    particles : (N, 3) array of (col, row, theta) = (x, y, theta) centroids and angles in radians
+    """
+    # Convert image from float32 in [0, 1] to uint8 in [0, 255]
+    img_uint8 = np.clip(img * 255.0, 0, 255).astype(np.uint8)
+
+    # Apply thresholding
+    thresh_type = cv2.THRESH_BINARY_INV if invert else cv2.THRESH_BINARY
+    _, thresh_img = cv2.threshold(img_uint8, int(threshold * 255), 255, thresh_type)
+
+    # Find contours
+    contours, _ = cv2.findContours(thresh_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    particles = []
+    for c in contours:
+        area = cv2.contourArea(c)
+        if min_area <= area <= max_area:
+            M = cv2.moments(c)
+            if M["m00"] > 1e-5:
+                cx = float(M["m10"] / M["m00"])
+                cy = float(M["m01"] / M["m00"])
+                
+                # Orientation angle via central moments:
+                mu20 = M["mu20"]
+                mu02 = M["mu02"]
+                mu11 = M["mu11"]
+                if abs(mu20 - mu02) > 1e-5 or abs(mu11) > 1e-5:
+                    theta = 0.5 * np.arctan2(2 * mu11, mu20 - mu02)
+                else:
+                    theta = 0.0
+                    
+                particles.append([cx, cy, theta])
+
+    if not particles:
+        return np.empty((0, 3), dtype=np.float32)
+
+    return np.array(particles, dtype=np.float32)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. Classical PTV — Nearest-Neighbour Matching
 # ─────────────────────────────────────────────────────────────────────────────

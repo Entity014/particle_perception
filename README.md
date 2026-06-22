@@ -18,6 +18,9 @@ This repository contains a deep-learning-based framework for **Particle Image Ve
 4. **Structured Experiment Directories**:
    - Training outputs are cleanly separated into `result/train/run{N}/`.
    - Deployment, evaluation summary metrics, and output videos are automatically routed to incremented folders in `result/deploy/run{N}/`.
+5. **Large Particle Tracking & Rotation (New)**:
+   - Tracks larger, irregular objects (like rocks/stones in water) using binarization and central contour moments.
+   - Calculates and overlays both translation speed ($v$ in px/f) and angular velocity ($\omega$ in deg/f) with high-readability background boxes.
 
 ---
 
@@ -27,12 +30,14 @@ This repository contains a deep-learning-based framework for **Particle Image Ve
 particle_perception/
 ├── src/
 │   ├── piv_nn.py         # PyTorch PIVDataset loader and PIVUNet network
-│   └── piv_system.py     # Classical PIV (FFT), PTV, and PIV-UNet guided PTV logic
+│   └── piv_system.py     # Classical PIV (FFT), binarized large PTV, and PIV-UNet guided PTV
 ├── script/
 │   ├── download_dataset.py # Script to fetch synthetic PIV datasets
 │   ├── train_piv_nn.py     # Training workflow for the PIV-UNet model
 │   ├── evaluate_nn_ptv.py  # Benchmark suite comparing PIV, PIV-UNet, and PTV methods
-│   └── process_video_piv.py# Script to infer and export flow animations on raw videos
+│   ├── process_video_piv.py# Script to infer and export flow animations on raw videos
+│   ├── generate_synthetic_rock_flow.py # NEW: Generates rotating rock flow video
+│   └── process_video_ptv.py# NEW: Tracks translation and rotation of large rocks
 ├── result/
 │   ├── train/
 │   │   └── run1/         # Checkpoints, training logs, loss curves
@@ -93,6 +98,25 @@ To run PIV-UNet on an experimental video stream (generating side-by-side quiver/
 python3 script/process_video_piv.py
 ```
 *Outputs (e.g., `laminar_jet_flow_prediction.mp4`) will be saved under `result/deploy/run{N}/`.*
+
+### 5. Large Particle (Rock) Tracking & Rotation
+To track translation and angular velocity of larger, irregular particles (such as rocks flowing in water):
+1. Generate the rotating rock flow synthetic video:
+   ```bash
+   python3 script/generate_synthetic_rock_flow.py
+   ```
+   *This saves the generated file to `data/PTV_dataset/synthetic_rock_flow.mp4`.*
+
+2. Run the PTV tracking pipeline:
+   ```bash
+   python3 script/process_video_ptv.py \
+       --input_video data/PTV_dataset/synthetic_rock_flow.mp4 \
+       --threshold 0.58 \
+       --min_area 200 \
+       --max_area 10000 \
+       --search_radius 15.0
+   ```
+   *This outputs the tracking video (overlaying green centroids, scaled magenta vectors, and readability speed boxes) to `result/deploy/run{N}/large_particle_tracking.mp4`.*
 
 ---
 
